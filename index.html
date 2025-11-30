@@ -1,339 +1,193 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-    <title>宝石消消乐</title>
-    <style>
-        /* 1. 基础样式设置 */
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: #1a1a2e; /* 深蓝背景 */
-            color: white;
-            font-family: 'Arial', sans-serif;
-            overflow: hidden; /* 禁止滚动 */
-            touch-action: none; /* 禁止手机默认触摸行为 */
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            height: 100vh;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>贪吃蛇大作战</title>
+<style>
+    /* 1. 强制全屏，禁止滚动 */
+    body {
+        margin: 0;
+        background-color: #2b2b2b;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        width: 100vw;
+        overflow: hidden; /* 关键：防止手机下拉刷新 */
+        touch-action: none; /* 关键：禁止浏览器默认触摸行为 */
+        font-family: 'Arial', sans-serif;
+        color: white;
+    }
 
-        /* 2. 顶部仪表盘 */
-        #ui-layer {
-            width: 100%;
-            height: 80px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0 20px;
-            box-sizing: border-box;
-            background: rgba(0, 0, 0, 0.3);
-            z-index: 10;
-        }
+    /* 2. 游戏画面 */
+    canvas {
+        background-color: #000;
+        border: 4px solid #555;
+        border-radius: 10px;
+        box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        display: block;
+    }
 
-        .stat-box {
-            text-align: center;
-        }
-        .label { font-size: 12px; color: #aaa; }
-        .value { font-size: 24px; font-weight: bold; color: #ffcc00; }
+    /* 3. 分数显示 */
+    #score-board {
+        font-size: 24px;
+        margin-bottom: 15px;
+        font-weight: bold;
+        color: #4CAF50;
+    }
 
-        /* 3. 游戏画布 */
-        canvas {
-            background-color: #16213e;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
-            margin-top: 20px;
-            border-radius: 8px;
-        }
+    /* 4. 手机控制按钮区域 */
+    #controls {
+        margin-top: 20px;
+        display: grid;
+        grid-template-columns: 80px 80px 80px;
+        grid-template-rows: 70px 70px;
+        gap: 10px;
+    }
 
-        /* 4. 菜单/结束弹窗 */
-        #menu-screen, #game-over-screen {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.85);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 20;
-        }
+    .btn {
+        width: 80px;
+        height: 70px;
+        background: rgba(255, 255, 255, 0.1);
+        border: 2px solid #666;
+        border-radius: 15px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 30px;
+        user-select: none; /* 禁止文字被选中 */
+        color: #ddd;
+    }
 
-        h1 { font-size: 40px; margin-bottom: 10px; color: #4ecca3; text-shadow: 0 0 10px #4ecca3; }
-        p { color: #ccc; margin-bottom: 30px; }
-        
-        button {
-            padding: 15px 40px;
-            font-size: 20px;
-            background: linear-gradient(45deg, #e94560, #ff6b6b);
-            border: none;
-            border-radius: 50px;
-            color: white;
-            font-weight: bold;
-            cursor: pointer;
-            box-shadow: 0 5px 15px rgba(233, 69, 96, 0.4);
-            transition: transform 0.1s;
-        }
-        button:active { transform: scale(0.95); }
-        .hidden { display: none !important; }
+    .btn:active {
+        background-color: rgba(76, 175, 80, 0.5); /* 按下变绿 */
+        transform: scale(0.95);
+    }
 
-    </style>
+    /* 布局占位符 */
+    .spacer { pointer-events: none; }
+
+</style>
 </head>
 <body>
 
-    <!-- 顶部 UI -->
-    <div id="ui-layer">
-        <div class="stat-box">
-            <div class="label">得分</div>
-            <div class="value" id="score-display">0</div>
-        </div>
-        <div class="stat-box">
-            <div class="label">时间</div>
-            <div class="value" id="time-display">60</div>
-        </div>
+    <div id="score-board">得分: <span id="score">0</span></div>
+    
+    <canvas id="gc" width="300" height="300"></canvas>
+
+    <div id="controls">
+        <div class="spacer"></div>
+        <div class="btn" ontouchstart="keyPush(38)" onmousedown="keyPush(38)">▲</div>
+        <div class="spacer"></div>
+        
+        <div class="btn" ontouchstart="keyPush(37)" onmousedown="keyPush(37)">◀</div>
+        <div class="btn" ontouchstart="keyPush(40)" onmousedown="keyPush(40)">▼</div>
+        <div class="btn" ontouchstart="keyPush(39)" onmousedown="keyPush(39)">▶</div>
     </div>
 
-    <!-- 游戏画布 -->
-    <canvas id="gameCanvas"></canvas>
+<script>
+    // === 游戏核心逻辑 (原生 JS) ===
+    const canvas = document.getElementById("gc");
+    const ctx = canvas.getContext("2d");
+    const scoreEl = document.getElementById("score");
 
-    <!-- 开始菜单 -->
-    <div id="menu-screen">
-        <h1>宝石消消乐</h1>
-        <p>点击相同颜色的方块消除它们</p>
-        <button onclick="startGame()">开始游戏</button>
-    </div>
+    // 变量定义
+    let px = 10, py = 10; // 蛇头坐标
+    let gs = 15;          // 格子大小 (Grid Size)
+    let tc = 20;          // 格子数量 (Tile Count: 300 / 15 = 20)
+    let ax = 15, ay = 15; // 苹果坐标
+    let xv = 0, yv = 0;   // 移动速度 X, Y
+    let trail = [];       // 蛇身数组
+    let tail = 5;         // 蛇身长度
+    let score = 0;
 
-    <!-- 结束界面 -->
-    <div id="game-over-screen" class="hidden">
-        <h1>游戏结束</h1>
-        <p>最终得分: <span id="final-score" style="color:yellow; font-size:24px">0</span></p>
-        <button onclick="startGame()">再玩一次</button>
-    </div>
+    // 启动游戏循环
+    window.onload = function() {
+        // 键盘监听 (电脑版)
+        document.addEventListener("keydown", function(evt) {
+            keyPush(evt.keyCode);
+        });
+        // 每秒刷新 15 次
+        setInterval(game, 1000/15);
+    }
 
-    <script>
-        // ================= 配置与变量 =================
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-        
-        // 游戏配置
-        const COLS = 8;
-        const ROWS = 10;
-        const TILE_SIZE = 40; // 基础大小，会根据屏幕调整
-        const COLORS = ['#FF4D4D', '#4DFF4D', '#4D4DFF', '#FFFF4D', '#FF4DFF']; // 红绿蓝黄紫
-        
-        let board = [];
-        let score = 0;
-        let timeLeft = 60;
-        let gameInterval;
-        let isPlaying = false;
-        let animationQueue = [];
+    // 游戏主循环
+    function game() {
+        px += xv;
+        py += yv;
 
-        // 适配手机屏幕
-        function resize() {
-            // 画布宽度占屏幕的 90%
-            const maxWidth = window.innerWidth * 0.95;
-            // 计算合适的方块大小
-            const size = Math.floor(maxWidth / COLS);
+        // 穿墙逻辑 (从左边出去，从右边回来)
+        if(px < 0) px = tc-1;
+        if(px > tc-1) px = 0;
+        if(py < 0) py = tc-1;
+        if(py > tc-1) py = 0;
+
+        // 1. 画背景 (黑色)
+        ctx.fillStyle = "black";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // 2. 画蛇 (绿色)
+        ctx.fillStyle = "lime";
+        for(let i = 0; i < trail.length; i++) {
+            ctx.fillRect(trail[i].x * gs, trail[i].y * gs, gs - 2, gs - 2);
             
-            canvas.width = size * COLS;
-            canvas.height = size * ROWS;
-            
-            // 存入全局变量供绘制使用
-            window.actualTileSize = size;
-            draw();
-        }
-        window.addEventListener('resize', resize);
-
-        // ================= 游戏逻辑 =================
-        
-        // 初始化棋盘
-        function initBoard() {
-            board = [];
-            for(let r=0; r<ROWS; r++) {
-                let row = [];
-                for(let c=0; c<COLS; c++) {
-                    row.push({
-                        color: COLORS[Math.floor(Math.random() * COLORS.length)],
-                        yOffset: -window.actualTileSize * (ROWS - r), // 简单的入场动画位置
-                        active: true
-                    });
-                }
-                board.push(row);
-            }
-        }
-
-        // 开始游戏
-        function startGame() {
-            document.getElementById('menu-screen').classList.add('hidden');
-            document.getElementById('game-over-screen').classList.add('hidden');
-            
-            score = 0;
-            timeLeft = 60;
-            updateUI();
-            
-            resize(); // 确保尺寸正确
-            initBoard();
-            isPlaying = true;
-
-            // 启动倒计时
-            if (gameInterval) clearInterval(gameInterval);
-            gameInterval = setInterval(() => {
-                timeLeft--;
-                updateUI();
-                if (timeLeft <= 0) gameOver();
-            }, 1000);
-
-            animate();
-        }
-
-        // 游戏结束
-        function gameOver() {
-            isPlaying = false;
-            clearInterval(gameInterval);
-            document.getElementById('final-score').innerText = score;
-            document.getElementById('game-over-screen').classList.remove('hidden');
-        }
-
-        // 更新界面文字
-        function updateUI() {
-            document.getElementById('score-display').innerText = score;
-            document.getElementById('time-display').innerText = timeLeft;
-        }
-
-        // ================= 输入处理 (点击/触摸) =================
-        
-        function handleInput(e) {
-            if (!isPlaying) return;
-
-            // 获取点击坐标
-            const rect = canvas.getBoundingClientRect();
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            
-            const x = clientX - rect.left;
-            const y = clientY - rect.top;
-
-            // 转换为网格坐标
-            const col = Math.floor(x / window.actualTileSize);
-            const row = Math.floor(y / window.actualTileSize);
-
-            if (col >= 0 && col < COLS && row >= 0 && row < ROWS) {
-                attemptClear(row, col);
-            }
-        }
-
-        canvas.addEventListener('mousedown', handleInput);
-        canvas.addEventListener('touchstart', handleInput, {passive: false});
-
-        // ================= 消除算法 (Flood Fill) =================
-        
-        function attemptClear(row, col) {
-            const targetColor = board[row][col].color;
-            if (targetColor === null) return; // 已经空了
-
-            // 寻找相连的同色方块
-            let matchPoints = [];
-            let visited = new Set();
-            
-            function check(r, c) {
-                const key = `${r},${c}`;
-                if (r<0 || r>=ROWS || c<0 || c>=COLS || visited.has(key)) return;
-                if (board[r][c].color !== targetColor) return;
-                
-                visited.add(key);
-                matchPoints.push({r, c});
-                
-                check(r+1, c);
-                check(r-1, c);
-                check(r, c+1);
-                check(r, c-1);
-            }
-
-            check(row, col);
-
-            // 如果连在一起的数量 >= 2，则消除
-            if (matchPoints.length >= 2) {
-                // 1. 加分 (连得越多分越高)
-                score += matchPoints.length * 10 + (matchPoints.length > 3 ? matchPoints.length * 5 : 0);
-                updateUI();
-
-                // 2. 消除
-                matchPoints.forEach(p => {
-                    board[p.r][p.c].color = null; 
-                });
-
-                // 3. 下落逻辑
-                applyGravity();
-            }
-        }
-
-        // 下落与填充
-        function applyGravity() {
-            for (let c = 0; c < COLS; c++) {
-                let tempCol = [];
-                // 收集非空的
-                for (let r = 0; r < ROWS; r++) {
-                    if (board[r][c].color !== null) {
-                        tempCol.push(board[r][c].color);
-                    }
-                }
-                
-                // 补充新的 (在顶部)
-                let missingCount = ROWS - tempCol.length;
-                for (let i = 0; i < missingCount; i++) {
-                    tempCol.unshift(COLORS[Math.floor(Math.random() * COLORS.length)]);
-                }
-
-                // 写回棋盘
-                for (let r = 0; r < ROWS; r++) {
-                    board[r][c].color = tempCol[r];
-                }
-            }
-            draw();
-        }
-
-        // ================= 绘图循环 =================
-        
-        function draw() {
-            // 清空背景
-            ctx.fillStyle = '#16213e';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            const size = window.actualTileSize;
-            const gap = 2; // 方块间隙
-
-            for(let r=0; r<ROWS; r++) {
-                for(let c=0; c<COLS; c++) {
-                    let tile = board[r][c];
-                    if (tile && tile.color) {
-                        ctx.fillStyle = tile.color;
-                        
-                        // 简单的圆角矩形效果
-                        let x = c * size + gap;
-                        let y = r * size + gap;
-                        let w = size - gap*2;
-                        let h = size - gap*2;
-
-                        ctx.fillRect(x, y, w, h);
-                        
-                        // 高光效果（让它看起来像宝石）
-                        ctx.fillStyle = 'rgba(255,255,255,0.3)';
-                        ctx.fillRect(x, y, w, h/3);
-                    }
+            // 撞到自己？
+            if(trail[i].x == px && trail[i].y == py) {
+                if(tail > 5) { // 只有蛇身变长后撞自己才重置
+                    tail = 5;
+                    score = 0;
+                    scoreEl.innerText = score;
+                    xv = 0; yv = 0; // 撞死后停下
                 }
             }
         }
 
-        function animate() {
-            if(isPlaying) {
-                draw();
-                requestAnimationFrame(animate);
-            }
+        // 更新蛇的位置记录
+        trail.push({x: px, y: py});
+        while(trail.length > tail) {
+            trail.shift(); // 移除尾巴
         }
 
-        // 初始化一次尺寸
-        resize();
+        // 3. 吃苹果逻辑
+        if(ax == px && ay == py) {
+            tail++; // 变长
+            score += 10;
+            scoreEl.innerText = score;
+            // 随机生成新苹果位置
+            ax = Math.floor(Math.random() * tc);
+            ay = Math.floor(Math.random() * tc);
+        }
 
-    </script>
+        // 4. 画苹果 (红色)
+        ctx.fillStyle = "red";
+        ctx.fillRect(ax * gs, ay * gs, gs - 2, gs - 2);
+    }
+
+    // 控制逻辑
+    function keyPush(code) {
+        switch(code) {
+            case 37: // 左
+                if(xv != 1) { xv = -1; yv = 0; }
+                break;
+            case 38: // 上
+                if(yv != 1) { xv = 0; yv = -1; }
+                break;
+            case 39: // 右
+                if(xv != -1) { xv = 1; yv = 0; }
+                break;
+            case 40: // 下
+                if(yv != -1) { xv = 0; yv = 1; }
+                break;
+        }
+    }
+
+    // 防止触摸时双击缩放
+    document.addEventListener('dblclick', function(event) {
+        event.preventDefault();
+    }, { passive: false });
+
+</script>
 </body>
 </html>
