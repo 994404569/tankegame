@@ -1,43 +1,339 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
-    <title>经典坦克大战</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>宝石消消乐</title>
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
-      body {
-        font-family: 'Press Start 2P', monospace, sans-serif;
-        background-color: #222;
-        color: #eee;
-        overflow: hidden; /* Prevent scrolling on mobile while playing */
-        touch-action: none;
-      }
-      /* Custom scrollbar for webkit */
-      ::-webkit-scrollbar {
-        width: 8px;
-      }
-      ::-webkit-scrollbar-track {
-        background: #333;
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #555;
-        border-radius: 4px;
-      }
+        /* 1. 基础样式设置 */
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a2e; /* 深蓝背景 */
+            color: white;
+            font-family: 'Arial', sans-serif;
+            overflow: hidden; /* 禁止滚动 */
+            touch-action: none; /* 禁止手机默认触摸行为 */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+        }
+
+        /* 2. 顶部仪表盘 */
+        #ui-layer {
+            width: 100%;
+            height: 80px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 20px;
+            box-sizing: border-box;
+            background: rgba(0, 0, 0, 0.3);
+            z-index: 10;
+        }
+
+        .stat-box {
+            text-align: center;
+        }
+        .label { font-size: 12px; color: #aaa; }
+        .value { font-size: 24px; font-weight: bold; color: #ffcc00; }
+
+        /* 3. 游戏画布 */
+        canvas {
+            background-color: #16213e;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            margin-top: 20px;
+            border-radius: 8px;
+        }
+
+        /* 4. 菜单/结束弹窗 */
+        #menu-screen, #game-over-screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+        }
+
+        h1 { font-size: 40px; margin-bottom: 10px; color: #4ecca3; text-shadow: 0 0 10px #4ecca3; }
+        p { color: #ccc; margin-bottom: 30px; }
+        
+        button {
+            padding: 15px 40px;
+            font-size: 20px;
+            background: linear-gradient(45deg, #e94560, #ff6b6b);
+            border: none;
+            border-radius: 50px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(233, 69, 96, 0.4);
+            transition: transform 0.1s;
+        }
+        button:active { transform: scale(0.95); }
+        .hidden { display: none !important; }
+
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0"
-  }
-}
-</script>
 </head>
-  <body>
-    <div id="root"></div>
-  </body>
+<body>
+
+    <!-- 顶部 UI -->
+    <div id="ui-layer">
+        <div class="stat-box">
+            <div class="label">得分</div>
+            <div class="value" id="score-display">0</div>
+        </div>
+        <div class="stat-box">
+            <div class="label">时间</div>
+            <div class="value" id="time-display">60</div>
+        </div>
+    </div>
+
+    <!-- 游戏画布 -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- 开始菜单 -->
+    <div id="menu-screen">
+        <h1>宝石消消乐</h1>
+        <p>点击相同颜色的方块消除它们</p>
+        <button onclick="startGame()">开始游戏</button>
+    </div>
+
+    <!-- 结束界面 -->
+    <div id="game-over-screen" class="hidden">
+        <h1>游戏结束</h1>
+        <p>最终得分: <span id="final-score" style="color:yellow; font-size:24px">0</span></p>
+        <button onclick="startGame()">再玩一次</button>
+    </div>
+
+    <script>
+        // ================= 配置与变量 =================
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // 游戏配置
+        const COLS = 8;
+        const ROWS = 10;
+        const TILE_SIZE = 40; // 基础大小，会根据屏幕调整
+        const COLORS = ['#FF4D4D', '#4DFF4D', '#4D4DFF', '#FFFF4D', '#FF4DFF']; // 红绿蓝黄紫
+        
+        let board = [];
+        let score = 0;
+        let timeLeft = 60;
+        let gameInterval;
+        let isPlaying = false;
+        let animationQueue = [];
+
+        // 适配手机屏幕
+        function resize() {
+            // 画布宽度占屏幕的 90%
+            const maxWidth = window.innerWidth * 0.95;
+            // 计算合适的方块大小
+            const size = Math.floor(maxWidth / COLS);
+            
+            canvas.width = size * COLS;
+            canvas.height = size * ROWS;
+            
+            // 存入全局变量供绘制使用
+            window.actualTileSize = size;
+            draw();
+        }
+        window.addEventListener('resize', resize);
+
+        // ================= 游戏逻辑 =================
+        
+        // 初始化棋盘
+        function initBoard() {
+            board = [];
+            for(let r=0; r<ROWS; r++) {
+                let row = [];
+                for(let c=0; c<COLS; c++) {
+                    row.push({
+                        color: COLORS[Math.floor(Math.random() * COLORS.length)],
+                        yOffset: -window.actualTileSize * (ROWS - r), // 简单的入场动画位置
+                        active: true
+                    });
+                }
+                board.push(row);
+            }
+        }
+
+        // 开始游戏
+        function startGame() {
+            document.getElementById('menu-screen').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.add('hidden');
+            
+            score = 0;
+            timeLeft = 60;
+            updateUI();
+            
+            resize(); // 确保尺寸正确
+            initBoard();
+            isPlaying = true;
+
+            // 启动倒计时
+            if (gameInterval) clearInterval(gameInterval);
+            gameInterval = setInterval(() => {
+                timeLeft--;
+                updateUI();
+                if (timeLeft <= 0) gameOver();
+            }, 1000);
+
+            animate();
+        }
+
+        // 游戏结束
+        function gameOver() {
+            isPlaying = false;
+            clearInterval(gameInterval);
+            document.getElementById('final-score').innerText = score;
+            document.getElementById('game-over-screen').classList.remove('hidden');
+        }
+
+        // 更新界面文字
+        function updateUI() {
+            document.getElementById('score-display').innerText = score;
+            document.getElementById('time-display').innerText = timeLeft;
+        }
+
+        // ================= 输入处理 (点击/触摸) =================
+        
+        function handleInput(e) {
+            if (!isPlaying) return;
+
+            // 获取点击坐标
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            
+            const x = clientX - rect.left;
+            const y = clientY - rect.top;
+
+            // 转换为网格坐标
+            const col = Math.floor(x / window.actualTileSize);
+            const row = Math.floor(y / window.actualTileSize);
+
+            if (col >= 0 && col < COLS && row >= 0 && row < ROWS) {
+                attemptClear(row, col);
+            }
+        }
+
+        canvas.addEventListener('mousedown', handleInput);
+        canvas.addEventListener('touchstart', handleInput, {passive: false});
+
+        // ================= 消除算法 (Flood Fill) =================
+        
+        function attemptClear(row, col) {
+            const targetColor = board[row][col].color;
+            if (targetColor === null) return; // 已经空了
+
+            // 寻找相连的同色方块
+            let matchPoints = [];
+            let visited = new Set();
+            
+            function check(r, c) {
+                const key = `${r},${c}`;
+                if (r<0 || r>=ROWS || c<0 || c>=COLS || visited.has(key)) return;
+                if (board[r][c].color !== targetColor) return;
+                
+                visited.add(key);
+                matchPoints.push({r, c});
+                
+                check(r+1, c);
+                check(r-1, c);
+                check(r, c+1);
+                check(r, c-1);
+            }
+
+            check(row, col);
+
+            // 如果连在一起的数量 >= 2，则消除
+            if (matchPoints.length >= 2) {
+                // 1. 加分 (连得越多分越高)
+                score += matchPoints.length * 10 + (matchPoints.length > 3 ? matchPoints.length * 5 : 0);
+                updateUI();
+
+                // 2. 消除
+                matchPoints.forEach(p => {
+                    board[p.r][p.c].color = null; 
+                });
+
+                // 3. 下落逻辑
+                applyGravity();
+            }
+        }
+
+        // 下落与填充
+        function applyGravity() {
+            for (let c = 0; c < COLS; c++) {
+                let tempCol = [];
+                // 收集非空的
+                for (let r = 0; r < ROWS; r++) {
+                    if (board[r][c].color !== null) {
+                        tempCol.push(board[r][c].color);
+                    }
+                }
+                
+                // 补充新的 (在顶部)
+                let missingCount = ROWS - tempCol.length;
+                for (let i = 0; i < missingCount; i++) {
+                    tempCol.unshift(COLORS[Math.floor(Math.random() * COLORS.length)]);
+                }
+
+                // 写回棋盘
+                for (let r = 0; r < ROWS; r++) {
+                    board[r][c].color = tempCol[r];
+                }
+            }
+            draw();
+        }
+
+        // ================= 绘图循环 =================
+        
+        function draw() {
+            // 清空背景
+            ctx.fillStyle = '#16213e';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const size = window.actualTileSize;
+            const gap = 2; // 方块间隙
+
+            for(let r=0; r<ROWS; r++) {
+                for(let c=0; c<COLS; c++) {
+                    let tile = board[r][c];
+                    if (tile && tile.color) {
+                        ctx.fillStyle = tile.color;
+                        
+                        // 简单的圆角矩形效果
+                        let x = c * size + gap;
+                        let y = r * size + gap;
+                        let w = size - gap*2;
+                        let h = size - gap*2;
+
+                        ctx.fillRect(x, y, w, h);
+                        
+                        // 高光效果（让它看起来像宝石）
+                        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                        ctx.fillRect(x, y, w, h/3);
+                    }
+                }
+            }
+        }
+
+        function animate() {
+            if(isPlaying) {
+                draw();
+                requestAnimationFrame(animate);
+            }
+        }
+
+        // 初始化一次尺寸
+        resize();
+
+    </script>
+</body>
 </html>
